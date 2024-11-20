@@ -26,4 +26,4 @@ def select_subset(input_file, output_file, num_entries):
      print(f"An error occurred: {e}")
 
 # Example usage:
-select_subset('data/magpie/Magpie-Pro-DPO-100K-v0.1-train-scaled.jsonl', 'data/magpie/Magpie-Pro-DPO-80K-v0.1-train-scaled.jsonl', 80000)
+select_subset('data/dorm-mix/train/processed/Magpie-Pro-DPO-20K-v0.1-train-scaled_processed.jsonl', 'data/dorm-mix/train/processed/Magpie-Pro-DPO-v0.1-train-scaled-12k_processed.jsonl', 12000)

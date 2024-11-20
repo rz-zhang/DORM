@@ -1,5 +1,5 @@
 REGION=us-west-2
-CONFIG_NAME=1113_12b_rm_west2a_oh_100k_2epoch_2node_lr3e6
+CONFIG_NAME=1115_12b_rm_oh_batch_debug_100k_2epoch_1node_lr3e6
 export GPFS="/fsx-Training/home/ronzhi/12b/NeMo-Aligner"
 
 declare -A queues
@@ -11,10 +11,10 @@ for queue in "${!queues[@]}"; do
     INSTANCE_TYPE=${queues[$queue]}
 
     JOB_PRIORITY=100
-    SHARE_IDENTIFIER=Smaller4NodeTraining # NeoTeam, Smaller4NodeTraining, Evaluation
+    SHARE_IDENTIFIER=NeoTeam # NeoTeam, Smaller4NodeTraining, Evaluation
 #    MLFLOW_TRACKING_URI=https://prod.$REGION.internal.mlflow.nile.amazon.dev
 
-    NUM_NODES=2
+    NUM_NODES=1
     NUM_GPUS_PER_NODE=8
     NUM_CPUS_PER_NODE=96
     MEMORY_PER_NODE=1143265
