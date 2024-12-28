@@ -24,7 +24,7 @@ from nemo.collections.nlp.data.language_modeling.megatron.gpt_dataset import _cr
 from nemo.collections.nlp.data.language_modeling.megatron.gpt_sft_chat_dataset import GPTSFTChatDataset
 from nemo.core import Dataset
 from nemo.utils import logging
-
+from nemo.collections.nlp.data.language_modeling.megatron.dataset_utils import get_samples_mapping
 
 class RLHFDataset(Dataset):
     def __init__(
@@ -166,6 +166,29 @@ class RewardModelDataset(Dataset):
                 if self.index_mapping_dir is not None and not os.path.isdir(self.index_mapping_dir):
                     os.makedirs(self.index_mapping_dir)
             torch.distributed.barrier()
+
+        # Create samples mapping
+        def get_samples_mapping_for_json(data, documents, num_samples, seq_length, seed, name, drop_last, tokenizer):
+            """Create a simpler mapping for json data"""
+            mapping = []
+            for doc_idx in documents:
+                mapping.append({
+                    "doc_idx": doc_idx,
+                    "length": len(data[doc_idx]["text"]) if isinstance(data[doc_idx], dict) else len(data[doc_idx])
+                })
+            return mapping
+
+        # Use in RewardModelDataset.__init__
+        self.samples_mapping = get_samples_mapping_for_json(
+            self.data,
+            documents,
+            num_samples=-1,
+            seq_length=seq_length,
+            seed=seed,
+            name=name,
+            drop_last=drop_last,
+            tokenizer=tokenizer
+        )
 
     def __len__(self):
         return len(self.data) // 2
@@ -645,3 +668,97 @@ class SteerLM2Dataset(GPTSFTChatDataset):
         }
 
         return processed_batch
+
+class WeightedRegressionRewardModelDataset(RegressionRewardModelDataset):
+    """Extended RegressionRewardModelDataset that supports dataset-based partitioning"""
+
+    # Define known sources and their partition IDs
+    KNOWN_SOURCES = {
+        'hs2': 0,
+        'oasst2': 1,
+        'wildguard': 2,
+        'magpie': 3,
+        'offsetbias': 4
+    }
+
+    def __init__(
+            self,
+            cfg,
+            tokenizer,
+            name: str,
+            data_prefix: str,
+            documents,
+            data,
+            seq_length: int,
+            seed: int,
+            drop_last: bool = True,
+    ):
+        super().__init__(
+            cfg=cfg,
+            tokenizer=tokenizer,
+            name=name,
+            data_prefix=data_prefix,
+            documents=documents,
+            data=data,
+            seq_length=seq_length,
+            seed=seed,
+            drop_last=drop_last,
+        )
+
+        # Fixed number of partitions based on known sources
+        self.num_partitions = len(self.KNOWN_SOURCES)
+        self.partition_ids = self._setup_partitions()
+
+        # Log partition information for training set
+        if self.name == 'train':
+            self._log_partition_stats()
+
+    def _setup_partitions(self):
+        """Setup partition IDs based on source field"""
+        partition_ids = np.zeros(len(self.data), dtype=np.int32)
+        unknown_sources = set()
+
+        for idx, doc in enumerate(self.data):
+            source = doc.get('source', 'unknown')
+            if source in self.KNOWN_SOURCES:
+                partition_ids[idx] = self.KNOWN_SOURCES[source]
+            else:
+                unknown_sources.add(source)
+                partition_ids[idx] = 0  # Default to first partition
+
+        # Warn about unknown sources
+        if unknown_sources:
+            logging.warning(f"Found unknown sources in data: {unknown_sources}")
+            logging.warning("These samples were assigned to partition 0")
+
+        return partition_ids
+
+    def _log_partition_stats(self):
+        """Log statistics about partition distribution"""
+        partition_counts = np.bincount(self.partition_ids, minlength=self.num_partitions)
+        total_samples = len(self.partition_ids)
+
+        logging.info(f"\n{'=' * 20} Dataset Partition Statistics {'=' * 20}")
+        logging.info(f"Total samples: {total_samples}")
+
+        # Create reverse mapping for logging
+        partition_to_source = {v: k for k, v in self.KNOWN_SOURCES.items()}
+
+        for partition_id in range(self.num_partitions):
+            source = partition_to_source[partition_id]
+            count = partition_counts[partition_id]
+            percentage = (count / total_samples) * 100
+            logging.info(f"Source: {source:<15} Partition: {partition_id} Count: {count:>6} ({percentage:.2f}%)")
+        logging.info("=" * 65)
+
+    def __getitem__(self, idx):
+        """Add partition ID to base item"""
+        item = super().__getitem__(idx)
+        doc_idx = self.samples_mapping[idx]["doc_idx"]
+        item["partition_id"] = torch.tensor(self.partition_ids[doc_idx])
+        return item
+
+    @property
+    def source_dict(self):
+        """Return mapping of sources to partition IDs for monitoring"""
+        return self.KNOWN_SOURCES

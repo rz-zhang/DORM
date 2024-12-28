@@ -21,6 +21,7 @@ import json
 from functools import partial
 
 import numpy as np
+import torch.nn as nn
 import torch
 from omegaconf.dictconfig import DictConfig
 
@@ -47,6 +48,7 @@ from nemo_aligner.data.nlp.datasets import (
     RegressionRewardModelDataset,
     RewardModelDataset,
     RLHFDataset,
+    WeightedRegressionRewardModelDataset,
 )
 from nemo_aligner.utils import parallel_state
 from nemo_aligner.utils.utils import collate_with_batch_max_sequence_length
@@ -264,6 +266,8 @@ build_train_valid_test_rm_datasets = partial(build_train_valid_test_datasets, Re
 build_train_valid_test_dpo_datasets = partial(build_train_valid_test_datasets, DPOModelDataset)
 build_train_valid_test_kto_datasets = partial(build_train_valid_test_datasets, KTOModelDataset)
 build_train_valid_test_regression_rm_datasets = partial(build_train_valid_test_datasets, RegressionRewardModelDataset)
+# Dorm Implementations
+build_train_valid_test_weighted_regression_rm_datasets = partial(build_train_valid_test_datasets, WeightedRegressionRewardModelDataset)
 
 
 def build_sft_dataset(data_cfg, tokenizer, num_samples, answer_only_loss=True, is_chat=True, special_tokens=None):
